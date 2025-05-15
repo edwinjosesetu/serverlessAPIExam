@@ -22,6 +22,11 @@ export class ExamStack extends cdk.Stack {
       tableName: "CinemaTable",
     });
 
+    table.addLocalSecondaryIndex({
+      indexName: "periodIx",
+      sortKey: { name: "period", type: dynamodb.AttributeType.STRING },
+    });
+
     const question1Fn = new lambdanode.NodejsFunction(this, "QuestionFn", {
       architecture: lambda.Architecture.ARM_64,
       runtime: lambda.Runtime.NODEJS_22_X,
@@ -56,6 +61,7 @@ export class ExamStack extends cdk.Stack {
       requestParameters: {
         "method.request.path.cinemaId": true,
         "method.request.querystring.movieId": false,
+        "method.request.querystring.period": false,
       },
     });
 
