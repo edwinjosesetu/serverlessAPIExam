@@ -17,10 +17,10 @@ export class ExamStack extends cdk.Stack {
     const table = new dynamodb.Table(this, "CinemasTable", {
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       partitionKey: { name: "cinemaId", type: dynamodb.AttributeType.NUMBER },
+      sortKey: { name: "movieId", type: dynamodb.AttributeType.STRING },
       removalPolicy: cdk.RemovalPolicy.DESTROY,
       tableName: "CinemaTable",
     });
-
 
     const question1Fn = new lambdanode.NodejsFunction(this, "QuestionFn", {
       architecture: lambda.Architecture.ARM_64,
@@ -33,21 +33,7 @@ export class ExamStack extends cdk.Stack {
       },
     });
 
-    new custom.AwsCustomResource(this, "moviesddbInitData", {
-      onCreate: {
-        service: "DynamoDB",
-        action: "batchWriteItem",
-        parameters: {
-          RequestItems: {
-            [table.tableName]: generateBatch(schedules),
-          },
-        },
-        physicalResourceId: custom.PhysicalResourceId.of("moviesddbInitData"), //.of(Date.now().toString()),
-      },
-      policy: custom.AwsCustomResourcePolicy.fromSdkCalls({
-        resources: [table.tableArn],
-      }),
-    });
+    table.grantReadData(question1Fn);
 
     const api = new apig.RestApi(this, "ExamAPI", {
       description: "Exam api",
@@ -62,5 +48,31 @@ export class ExamStack extends cdk.Stack {
       },
     });
 
+    const cinemas = api.root.addResource("cinemas");
+    const cinemaId = cinemas.addResource("{cinemaId}");
+    const movies = cinemaId.addResource("movies");
+
+    movies.addMethod("GET", new apig.LambdaIntegration(question1Fn), {
+      requestParameters: {
+        "method.request.path.cinemaId": true,
+        "method.request.querystring.movieId": false,
+      },
+    });
+
+    new custom.AwsCustomResource(this, "moviesddbInitData", {
+      onCreate: {
+        service: "DynamoDB",
+        action: "batchWriteItem",
+        parameters: {
+          RequestItems: {
+            [table.tableName]: generateBatch(schedules),
+          },
+        },
+        physicalResourceId: custom.PhysicalResourceId.of("moviesddbInitData"),
+      },
+      policy: custom.AwsCustomResourcePolicy.fromSdkCalls({
+        resources: [table.tableArn],
+      }),
+    });
   }
 }
