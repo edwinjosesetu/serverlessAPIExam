@@ -3,30 +3,77 @@ import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import {
   DynamoDBDocumentClient,
   QueryCommand,
-  QueryCommandInput,
 } from "@aws-sdk/lib-dynamodb";
-import schema from "../shared/types.schema.json";
 const client = createDDbDocClient();
 
-export const handler: APIGatewayProxyHandlerV2 = async (event, context) => {
-  try {
-    console.log("Event: ", JSON.stringify(event));
- 
+export const handler: APIGatewayProxyHandlerV2 = async (event) => {
+  const tableName = "CinemaTable";
+  const cinemaId = event.pathParameters?.cinemaId;
+  const movieId = event.queryStringParameters?.movieId;
+  const period = event.queryStringParameters?.period;
+
+  if (!cinemaId) {
     return {
-      statusCode: 200,
-      headers: {
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({}),
+      statusCode: 400,
+      body: JSON.stringify({ error: "cinemaId is required" }),
     };
-  } catch (error: any) {
-    console.log(JSON.stringify(error));
+  }
+
+  try {
+    if (movieId) {
+      const result = await client.send(
+        new QueryCommand({
+          TableName: tableName,
+          KeyConditionExpression: "cinemaId = :cinemaId AND movieId = :movieId",
+          ExpressionAttributeValues: {
+            ":cinemaId": Number(cinemaId),
+            ":movieId": movieId,
+          },
+        })
+      );
+      return {
+        statusCode: 200,
+        body: JSON.stringify(result.Items),
+      };
+    } else if (period) {
+      const result = await client.send(
+        new QueryCommand({
+          TableName: tableName,
+          KeyConditionExpression: "cinemaId = :cinemaId",
+          FilterExpression: "#period = :period",
+          ExpressionAttributeNames: {
+            "#period": "period",
+          },
+          ExpressionAttributeValues: {
+            ":cinemaId": Number(cinemaId),
+            ":period": period,
+          },
+        })
+      );
+      return {
+        statusCode: 200,
+        body: JSON.stringify(result.Items),
+      };
+    } else {
+      const result = await client.send(
+        new QueryCommand({
+          TableName: tableName,
+          KeyConditionExpression: "cinemaId = :cinemaId",
+          ExpressionAttributeValues: {
+            ":cinemaId": Number(cinemaId),
+          },
+        })
+      );
+      return {
+        statusCode: 200,
+        body: JSON.stringify(result.Items),
+      };
+    }
+  } catch (error) {
+    console.error("DynamoDB error:", error);
     return {
       statusCode: 500,
-      headers: {
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({ error }),
+      body: JSON.stringify({ error: "Internal server error" }),
     };
   }
 };
